@@ -963,7 +963,7 @@ fun PlexIntegrationPage(
         // Icon Collage
         PermissionIconCollage(
             icons = plexIcons,
-            modifier = Modifier.height(120.dp)
+            height = 120.dp
         )
         
         Spacer(modifier = Modifier.height(32.dp))
