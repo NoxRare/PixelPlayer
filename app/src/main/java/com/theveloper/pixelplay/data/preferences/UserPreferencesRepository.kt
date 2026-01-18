@@ -149,6 +149,17 @@ constructor(
         // Lyrics Source Preference
         val LYRICS_SOURCE_PREFERENCE = stringPreferencesKey("lyrics_source_preference")
         val AUTO_SCAN_LRC_FILES = booleanPreferencesKey("auto_scan_lrc_files")
+        
+        // Plex Integration Settings
+        val PLEX_ENABLED = booleanPreferencesKey("plex_enabled")
+        val PLEX_USERNAME = stringPreferencesKey("plex_username")
+        val PLEX_SERVER_ID = stringPreferencesKey("plex_server_id")
+        val PLEX_SERVER_NAME = stringPreferencesKey("plex_server_name")
+        val PLEX_MUSIC_SECTION_KEY = stringPreferencesKey("plex_music_section_key")
+        val PLEX_MUSIC_SECTION_TITLE = stringPreferencesKey("plex_music_section_title")
+        val MUSIC_SOURCE_PREFERENCE = stringPreferencesKey("music_source_preference")
+        val PLEX_CACHE_SIZE_MB = intPreferencesKey("plex_cache_size_mb")
+        val PLEX_CACHE_ENABLED = booleanPreferencesKey("plex_cache_enabled")
     }
 
     val appRebrandDialogShownFlow: Flow<Boolean> =
@@ -1369,6 +1380,131 @@ constructor(
     suspend fun setPinnedPresets(presetNames: List<String>) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.PINNED_PRESETS] = json.encodeToString(presetNames)
+        }
+    }
+    
+    // ===== Plex Integration Settings =====
+    
+    val plexEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_ENABLED] ?: false
+        }
+    
+    suspend fun setPlexEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PLEX_ENABLED] = enabled
+        }
+    }
+    
+    val plexUsernameFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_USERNAME]
+        }
+    
+    suspend fun setPlexUsername(username: String?) {
+        dataStore.edit { preferences ->
+            if (username != null) {
+                preferences[PreferencesKeys.PLEX_USERNAME] = username
+            } else {
+                preferences.remove(PreferencesKeys.PLEX_USERNAME)
+            }
+        }
+    }
+    
+    val plexServerIdFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_SERVER_ID]
+        }
+    
+    val plexServerNameFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_SERVER_NAME]
+        }
+    
+    suspend fun setPlexServer(serverId: String?, serverName: String?) {
+        dataStore.edit { preferences ->
+            if (serverId != null && serverName != null) {
+                preferences[PreferencesKeys.PLEX_SERVER_ID] = serverId
+                preferences[PreferencesKeys.PLEX_SERVER_NAME] = serverName
+            } else {
+                preferences.remove(PreferencesKeys.PLEX_SERVER_ID)
+                preferences.remove(PreferencesKeys.PLEX_SERVER_NAME)
+            }
+        }
+    }
+    
+    val plexMusicSectionKeyFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_MUSIC_SECTION_KEY]
+        }
+    
+    val plexMusicSectionTitleFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_MUSIC_SECTION_TITLE]
+        }
+    
+    suspend fun setPlexMusicSection(sectionKey: String?, sectionTitle: String?) {
+        dataStore.edit { preferences ->
+            if (sectionKey != null && sectionTitle != null) {
+                preferences[PreferencesKeys.PLEX_MUSIC_SECTION_KEY] = sectionKey
+                preferences[PreferencesKeys.PLEX_MUSIC_SECTION_TITLE] = sectionTitle
+            } else {
+                preferences.remove(PreferencesKeys.PLEX_MUSIC_SECTION_KEY)
+                preferences.remove(PreferencesKeys.PLEX_MUSIC_SECTION_TITLE)
+            }
+        }
+    }
+    
+    val musicSourcePreferenceFlow: Flow<MusicSourcePreference> =
+        dataStore.data.map { preferences ->
+            val value = preferences[PreferencesKeys.MUSIC_SOURCE_PREFERENCE]
+            if (value != null) {
+                try {
+                    MusicSourcePreference.valueOf(value)
+                } catch (e: Exception) {
+                    MusicSourcePreference.LOCAL_ONLY
+                }
+            } else {
+                MusicSourcePreference.LOCAL_ONLY
+            }
+        }
+    
+    suspend fun setMusicSourcePreference(preference: MusicSourcePreference) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.MUSIC_SOURCE_PREFERENCE] = preference.name
+        }
+    }
+    
+    val plexCacheSizeMbFlow: Flow<Int> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_CACHE_SIZE_MB] ?: 500 // Default 500 MB
+        }
+    
+    suspend fun setPlexCacheSizeMb(sizeMb: Int) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PLEX_CACHE_SIZE_MB] = sizeMb.coerceIn(100, 5000)
+        }
+    }
+    
+    val plexCacheEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.PLEX_CACHE_ENABLED] ?: true
+        }
+    
+    suspend fun setPlexCacheEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PLEX_CACHE_ENABLED] = enabled
+        }
+    }
+    
+    suspend fun clearPlexSettings() {
+        dataStore.edit { preferences ->
+            preferences.remove(PreferencesKeys.PLEX_ENABLED)
+            preferences.remove(PreferencesKeys.PLEX_USERNAME)
+            preferences.remove(PreferencesKeys.PLEX_SERVER_ID)
+            preferences.remove(PreferencesKeys.PLEX_SERVER_NAME)
+            preferences.remove(PreferencesKeys.PLEX_MUSIC_SECTION_KEY)
+            preferences.remove(PreferencesKeys.PLEX_MUSIC_SECTION_TITLE)
         }
     }
 }

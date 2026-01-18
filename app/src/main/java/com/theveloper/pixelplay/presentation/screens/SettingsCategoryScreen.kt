@@ -608,6 +608,11 @@ fun SettingsCategoryScreen(
                              // Equalizer has its own screen, so this block is unreachable via standard navigation
                              // but required for exhaustiveness.
                         }
+                        SettingsCategory.PLEX_INTEGRATION -> {
+                             // Plex Integration has its own screen (PlexSettingsScreen), 
+                             // so this block is unreachable via standard navigation
+                             // but required for exhaustiveness.
+                        }
 
                     }
                }
