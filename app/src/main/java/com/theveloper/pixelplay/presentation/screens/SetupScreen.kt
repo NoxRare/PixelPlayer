@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.presentation.screens
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -114,11 +115,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.theveloper.pixelplay.R
+import com.theveloper.pixelplay.data.network.plex.PlexAuthState
 import com.theveloper.pixelplay.presentation.components.PermissionIconCollage
 import com.theveloper.pixelplay.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.theveloper.pixelplay.presentation.components.subcomps.SineWaveLine
 import com.theveloper.pixelplay.presentation.components.FileExplorerDialog
 import com.theveloper.pixelplay.presentation.viewmodel.DirectoryEntry
+import com.theveloper.pixelplay.presentation.viewmodel.PlexViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.SetupUiState
 import com.theveloper.pixelplay.presentation.viewmodel.SetupViewModel
 import com.theveloper.pixelplay.ui.theme.ExpTitleTypography
@@ -128,6 +131,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
+import timber.log.Timber
 import java.io.File
 
 @OptIn(ExperimentalPermissionsApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -940,10 +944,13 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
 
 @Composable
 fun PlexIntegrationPage(
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    viewModel: PlexViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val authState by viewModel.authState.collectAsState()
+    val oauthUiState by viewModel.oauthUiState.collectAsState()
     
     val plexIcons = persistentListOf(
         R.drawable.rounded_cast_24,
@@ -952,6 +959,27 @@ fun PlexIntegrationPage(
         R.drawable.rounded_queue_music_24,
         R.drawable.rounded_play_arrow_24
     )
+
+    // Handle OAuth URL opening
+    LaunchedEffect(oauthUiState.oauthUrl) {
+        oauthUiState.oauthUrl?.let { url ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Timber.tag("PlexIntegrationPage").e(e, "Failed to open OAuth URL")
+            }
+        }
+    }
+
+    // Auto-skip if authenticated
+    LaunchedEffect(authState) {
+        if (authState is PlexAuthState.Authenticated) {
+            // Give user a moment to see the success state
+            kotlinx.coroutines.delay(1500)
+            onSkip()
+        }
+    }
     
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -977,42 +1005,90 @@ fun PlexIntegrationPage(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        Text(
-            text = "Stream your music from a Plex Media Server. This is optional - you can configure it later in settings.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        when (authState) {
+            is PlexAuthState.Authenticated -> {
+                Text(
+                    text = "Successfully connected!",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            is PlexAuthState.Authenticating -> {
+                Text(
+                    text = "Waiting for authentication...\nPlease complete sign-in in your browser.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                CircularProgressIndicator()
+            }
+            else -> {
+                Text(
+                    text = "Stream your music from a Plex Media Server. You can configure this now or later in settings.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        
+        if (oauthUiState.error != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = oauthUiState.error ?: "",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Configure Now button
-        FilledTonalButton(
-            onClick = {
-                // Navigate to PlexSettingsScreen would require navigation changes
-                // For setup, we'll skip this for now
-                Toast.makeText(
-                    context,
-                    "Plex can be configured in Settings > Plex Integration",
-                    Toast.LENGTH_LONG
-                ).show()
-                onSkip()
-            },
-            modifier = Modifier.fillMaxWidth(0.7f)
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.rounded_cast_24),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Configure Plex")
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        TextButton(onClick = onSkip) {
-            Text("Skip for now")
+        // Configure Now button (hidden if authenticated)
+        if (authState !is PlexAuthState.Authenticated) {
+            Button(
+                onClick = {
+                    viewModel.startOAuth()
+                },
+                modifier = Modifier.fillMaxWidth(0.7f),
+                enabled = !oauthUiState.isLoading && authState !is PlexAuthState.Authenticating
+            ) {
+                if (oauthUiState.isLoading || authState is PlexAuthState.Authenticating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_cast_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Connect to Plex")
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            TextButton(
+                onClick = {
+                    viewModel.cancelOAuth()
+                    onSkip()
+                }
+            ) {
+                Text("Skip for now")
+            }
         }
     }
 }

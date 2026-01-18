@@ -209,3 +209,31 @@ enum class MusicSource {
     LOCAL,
     PLEX
 }
+
+/**
+ * OAuth PIN request for Plex authentication.
+ */
+data class PlexOAuthPinRequest(
+    val strong: Boolean = true
+)
+
+/**
+ * Response from Plex OAuth PIN endpoint.
+ */
+data class PlexOAuthPinResponse(
+    @SerializedName("id") val id: Int,
+    @SerializedName("code") val code: String,
+    @SerializedName("product") val product: String? = null,
+    @SerializedName("trusted") val trusted: Boolean = false,
+    @SerializedName("clientIdentifier") val clientIdentifier: String? = null,
+    @SerializedName("authToken") val authToken: String? = null
+)
+
+/**
+ * Response from checking OAuth PIN status.
+ */
+data class PlexOAuthCheckResponse(
+    @SerializedName("id") val id: Int,
+    @SerializedName("code") val code: String,
+    @SerializedName("authToken") val authToken: String? = null
+)

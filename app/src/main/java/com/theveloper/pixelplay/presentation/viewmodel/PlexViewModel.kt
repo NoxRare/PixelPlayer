@@ -36,9 +36,9 @@ class PlexViewModel @Inject constructor(
     // Authentication state
     val authState: StateFlow<PlexAuthState> = plexAuthManager.authState
 
-    // UI state for login screen
-    private val _loginUiState = MutableStateFlow(PlexLoginUiState())
-    val loginUiState: StateFlow<PlexLoginUiState> = _loginUiState.asStateFlow()
+    // UI state for OAuth login screen
+    private val _oauthUiState = MutableStateFlow(PlexOAuthUiState())
+    val oauthUiState: StateFlow<PlexOAuthUiState> = _oauthUiState.asStateFlow()
 
     // Available servers
     val availableServers: StateFlow<List<PlexServer>> = plexMusicRepository.availableServers
@@ -71,36 +71,82 @@ class PlexViewModel @Inject constructor(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     /**
-     * Sign in to Plex with email/username and password.
+     * Start OAuth authentication flow.
+     * Opens browser for user to authenticate and polls for completion.
      */
-    fun signIn(login: String, password: String) {
+    fun startOAuth() {
         viewModelScope.launch {
-            _loginUiState.value = _loginUiState.value.copy(isLoading = true, error = null)
+            _oauthUiState.value = _oauthUiState.value.copy(isLoading = true, error = null)
             
-            val result = plexMusicRepository.signIn(login, password)
+            val pinResult = plexAuthManager.startOAuth()
+            
+            pinResult.fold(
+                onSuccess = { pinResponse ->
+                    val oauthUrl = plexAuthManager.buildOAuthUrl(pinResponse.id, pinResponse.code)
+                    _oauthUiState.value = _oauthUiState.value.copy(
+                        isLoading = false,
+                        oauthUrl = oauthUrl,
+                        pinId = pinResponse.id,
+                        pinCode = pinResponse.code
+                    )
+                    
+                    // Start polling for auth completion
+                    pollForAuth(pinResponse.id)
+                },
+                onFailure = { exception ->
+                    _oauthUiState.value = _oauthUiState.value.copy(
+                        isLoading = false,
+                        error = exception.message ?: "Failed to start OAuth"
+                    )
+                    Timber.tag(TAG).e(exception, "Failed to start OAuth")
+                }
+            )
+        }
+    }
+
+    /**
+     * Poll for OAuth authentication completion.
+     */
+    private fun pollForAuth(pinId: Int) {
+        viewModelScope.launch {
+            val result = plexAuthManager.pollOAuthPin(pinId)
             
             result.fold(
-                onSuccess = {
-                    _loginUiState.value = _loginUiState.value.copy(isLoading = false)
-                    Timber.tag(TAG).d("Sign in successful")
+                onSuccess = { user ->
+                    _oauthUiState.value = _oauthUiState.value.copy(
+                        isLoading = false,
+                        oauthUrl = null,
+                        pinId = null,
+                        pinCode = null
+                    )
+                    Timber.tag(TAG).d("OAuth authentication successful")
+                    
                     // Save username to preferences
-                    val authState = plexAuthManager.authState.value
-                    if (authState is PlexAuthState.Authenticated) {
-                        userPreferencesRepository.setPlexUsername(authState.user.username)
-                        userPreferencesRepository.setPlexEnabled(true)
-                    }
+                    userPreferencesRepository.setPlexUsername(user.username)
+                    userPreferencesRepository.setPlexEnabled(true)
+                    
                     // Automatically discover servers after sign in
                     discoverServers()
                 },
                 onFailure = { exception ->
-                    _loginUiState.value = _loginUiState.value.copy(
+                    _oauthUiState.value = _oauthUiState.value.copy(
                         isLoading = false,
+                        oauthUrl = null,
+                        pinId = null,
+                        pinCode = null,
                         error = exception.message ?: "Authentication failed"
                     )
-                    Timber.tag(TAG).e(exception, "Sign in failed")
+                    Timber.tag(TAG).e(exception, "OAuth authentication failed")
                 }
             )
         }
+    }
+
+    /**
+     * Cancel ongoing OAuth authentication.
+     */
+    fun cancelOAuth() {
+        _oauthUiState.value = PlexOAuthUiState()
     }
 
     /**
@@ -112,6 +158,8 @@ class PlexViewModel @Inject constructor(
             // Clear preferences
             userPreferencesRepository.clearPlexSettings()
             userPreferencesRepository.setPlexEnabled(false)
+            // Reset OAuth UI state
+            _oauthUiState.value = PlexOAuthUiState()
         }
     }
 
@@ -210,34 +258,17 @@ class PlexViewModel @Inject constructor(
      */
     fun clearError() {
         _error.value = null
-        _loginUiState.value = _loginUiState.value.copy(error = null)
-    }
-
-    /**
-     * Update login form fields.
-     */
-    fun updateLoginField(field: LoginField, value: String) {
-        _loginUiState.value = when (field) {
-            LoginField.LOGIN -> _loginUiState.value.copy(login = value)
-            LoginField.PASSWORD -> _loginUiState.value.copy(password = value)
-        }
+        _oauthUiState.value = _oauthUiState.value.copy(error = null)
     }
 }
 
 /**
- * UI state for Plex login screen.
+ * UI state for Plex OAuth authentication screen.
  */
-data class PlexLoginUiState(
-    val login: String = "",
-    val password: String = "",
+data class PlexOAuthUiState(
+    val oauthUrl: String? = null,
+    val pinId: Int? = null,
+    val pinCode: String? = null,
     val isLoading: Boolean = false,
     val error: String? = null
 )
-
-/**
- * Login form field identifiers.
- */
-enum class LoginField {
-    LOGIN,
-    PASSWORD
-}
