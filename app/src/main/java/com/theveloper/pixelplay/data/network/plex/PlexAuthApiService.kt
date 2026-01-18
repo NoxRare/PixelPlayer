@@ -59,7 +59,7 @@ interface PlexAuthApiService {
         @Header("X-Plex-Token") authToken: String,
         @Header("X-Plex-Client-Identifier") clientIdentifier: String,
         @Header("Accept") accept: String = "application/json"
-    ): PlexAuthResponse
+    ): PlexUser
 
     /**
      * Sign in to Plex.tv with username/email and password.
