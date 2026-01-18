@@ -171,6 +171,8 @@ fun SetupScreen(
         }
         // Add directory selection page after storage permissions
         list.add(SetupPage.DirectorySelection)
+        // Add Plex integration page (optional step)
+        list.add(SetupPage.PlexIntegration)
         // Add notifications permission page for Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(SetupPage.NotificationsPermission)
@@ -269,6 +271,13 @@ fun SetupScreen(
                         },
                         onToggleAllowed = setupViewModel::toggleDirectoryAllowed,
                         onStorageSelected = setupViewModel::selectStorage
+                    )
+                    SetupPage.PlexIntegration -> PlexIntegrationPage(
+                        onSkip = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            }
+                        }
                     )
                     SetupPage.NotificationsPermission -> NotificationsPermissionPage(uiState)
                     SetupPage.AlarmsPermission -> AlarmsPermissionPage(uiState)
@@ -402,6 +411,7 @@ sealed class SetupPage {
     object Welcome : SetupPage()
     object MediaPermission : SetupPage()
     object DirectorySelection : SetupPage()
+    object PlexIntegration : SetupPage()
     object NotificationsPermission : SetupPage()
     object AlarmsPermission : SetupPage()
     object AllFilesPermission : SetupPage()
@@ -929,6 +939,85 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
 
 
 @Composable
+@Composable
+fun PlexIntegrationPage(
+    onSkip: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    val plexIcons = persistentListOf(
+        R.drawable.rounded_cloud_24,
+        R.drawable.rounded_music_note_24,
+        R.drawable.rounded_library_music_24,
+        R.drawable.rounded_queue_music_24,
+        R.drawable.rounded_play_arrow_24
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+        // Icon Collage
+        AnimatedIconCollage(
+            icons = plexIcons,
+            size = 120.dp
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Text(
+            text = "Connect to Plex",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "Stream your music from a Plex Media Server. This is optional - you can configure it later in settings.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Configure Now button
+        FilledTonalButton(
+            onClick = {
+                // Navigate to PlexSettingsScreen would require navigation changes
+                // For setup, we'll skip this for now
+                Toast.makeText(
+                    context,
+                    "Plex can be configured in Settings > Plex Integration",
+                    Toast.LENGTH_LONG
+                ).show()
+                onSkip()
+            },
+            modifier = Modifier.fillMaxWidth(0.7f)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.rounded_cloud_24),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Configure Plex")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        TextButton(onClick = onSkip) {
+            Text("Skip for now")
+        }
+    }
+}
+
 fun BatteryOptimizationPage(
     onSkip: () -> Unit
 ) {

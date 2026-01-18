@@ -83,6 +83,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.theveloper.pixelplay.data.network.plex.PlexAuthState
 import com.theveloper.pixelplay.data.network.plex.PlexLibrarySection
 import com.theveloper.pixelplay.data.network.plex.PlexServer
+import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.presentation.viewmodel.LoginField
 import com.theveloper.pixelplay.presentation.viewmodel.PlexViewModel
@@ -484,6 +485,11 @@ private fun PlexAuthenticatedContent(
             item {
                 PlexCacheSettings()
             }
+            
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                MusicSourceSelection()
+            }
         }
 
         // Error display
@@ -780,4 +786,121 @@ private fun PlexCacheSettings() {
 @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
 interface PlexCacheSettingsEntryPoint {
     fun userPreferencesRepository(): UserPreferencesRepository
+}
+
+@Composable
+private fun MusicSourceSelection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    val userPreferencesRepository = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            PlexCacheSettingsEntryPoint::class.java
+        ).userPreferencesRepository()
+    }
+    
+    val musicSourcePreference by userPreferencesRepository.musicSourcePreferenceFlow
+        .collectAsState(initial = MusicSourcePreference.LOCAL_ONLY)
+    
+    PlexSectionCard(
+        title = "Music Source",
+        icon = Icons.Rounded.LibraryMusic
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Choose which music sources to use in your library",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            MusicSourceOption(
+                title = "Local Files Only",
+                description = "Use only music stored on this device",
+                isSelected = musicSourcePreference == MusicSourcePreference.LOCAL_ONLY,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.LOCAL_ONLY)
+                    }
+                }
+            )
+            
+            MusicSourceOption(
+                title = "Plex Server Only",
+                description = "Stream music from Plex server exclusively",
+                isSelected = musicSourcePreference == MusicSourcePreference.PLEX_ONLY,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.PLEX_ONLY)
+                    }
+                }
+            )
+            
+            MusicSourceOption(
+                title = "Both Sources",
+                description = "Combine local files and Plex server music",
+                isSelected = musicSourcePreference == MusicSourcePreference.BOTH,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.BOTH)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MusicSourceOption(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
 }
