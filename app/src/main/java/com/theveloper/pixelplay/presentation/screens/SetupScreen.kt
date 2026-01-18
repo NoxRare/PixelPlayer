@@ -939,7 +939,6 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
 
 
 @Composable
-@Composable
 fun PlexIntegrationPage(
     onSkip: () -> Unit
 ) {
@@ -947,7 +946,7 @@ fun PlexIntegrationPage(
     val scope = rememberCoroutineScope()
     
     val plexIcons = persistentListOf(
-        R.drawable.rounded_cloud_24,
+        R.drawable.rounded_cast_24,
         R.drawable.rounded_music_note_24,
         R.drawable.rounded_library_music_24,
         R.drawable.rounded_queue_music_24,
@@ -962,9 +961,9 @@ fun PlexIntegrationPage(
             .padding(24.dp)
     ) {
         // Icon Collage
-        AnimatedIconCollage(
+        PermissionIconCollage(
             icons = plexIcons,
-            size = 120.dp
+            modifier = Modifier.height(120.dp)
         )
         
         Spacer(modifier = Modifier.height(32.dp))
@@ -1002,7 +1001,7 @@ fun PlexIntegrationPage(
             modifier = Modifier.fillMaxWidth(0.7f)
         ) {
             Icon(
-                painter = painterResource(R.drawable.rounded_cloud_24),
+                painter = painterResource(R.drawable.rounded_cast_24),
                 contentDescription = null,
                 modifier = Modifier.size(20.dp)
             )
@@ -1018,6 +1017,7 @@ fun PlexIntegrationPage(
     }
 }
 
+@Composable
 fun BatteryOptimizationPage(
     onSkip: () -> Unit
 ) {
