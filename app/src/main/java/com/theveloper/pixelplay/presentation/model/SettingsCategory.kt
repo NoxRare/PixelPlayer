@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.presentation.model
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Style
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.DeveloperMode
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
@@ -55,6 +56,12 @@ enum class SettingsCategory(
         title = "Equalizer",
         subtitle = "Adjust audio frequencies and presets",
         icon = Icons.Rounded.GraphicEq
+    ),
+    PLEX_INTEGRATION(
+        id = "plex",
+        title = "Plex Integration",
+        subtitle = "Connect to Plex server and stream music",
+        icon = Icons.Rounded.Cloud
     ),
     ABOUT(
         id = "about",

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
@@ -51,7 +52,9 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -61,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,8 +83,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.theveloper.pixelplay.data.network.plex.PlexAuthState
 import com.theveloper.pixelplay.data.network.plex.PlexLibrarySection
 import com.theveloper.pixelplay.data.network.plex.PlexServer
+import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
+import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.presentation.viewmodel.LoginField
 import com.theveloper.pixelplay.presentation.viewmodel.PlexViewModel
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * Screen for managing Plex integration settings.
@@ -472,6 +480,18 @@ private fun PlexAuthenticatedContent(
             }
         }
 
+        // Cache Settings section (only show if music section is selected)
+        if (selectedMusicSection != null) {
+            item {
+                PlexCacheSettings()
+            }
+            
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                MusicSourceSelection()
+            }
+        }
+
         // Error display
         if (error != null) {
             item {
@@ -648,6 +668,229 @@ private fun PlexMusicSectionItem(
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlexCacheSettings() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Access UserPreferencesRepository from context
+    val userPreferencesRepository = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            PlexCacheSettingsEntryPoint::class.java
+        ).userPreferencesRepository()
+    }
+    
+    val cacheEnabled by userPreferencesRepository.plexCacheEnabledFlow.collectAsState(initial = true)
+    val cacheSizeMb by userPreferencesRepository.plexCacheSizeMbFlow.collectAsState(initial = 500)
+    
+    PlexSectionCard(
+        title = "Cache Settings",
+        icon = Icons.Rounded.Storage
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Cache enabled switch
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Enable Cache",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Cache music from Plex for offline playback",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = cacheEnabled,
+                    onCheckedChange = { enabled ->
+                        scope.launch {
+                            userPreferencesRepository.setPlexCacheEnabled(enabled)
+                        }
+                    }
+                )
+            }
+            
+            // Cache size slider (only show when cache is enabled)
+            if (cacheEnabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Cache Size",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "$cacheSizeMb MB",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Slider(
+                        value = cacheSizeMb.toFloat(),
+                        onValueChange = { value ->
+                            scope.launch {
+                                userPreferencesRepository.setPlexCacheSizeMb(value.roundToInt())
+                            }
+                        },
+                        valueRange = 100f..5000f,
+                        steps = 48,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Recommended: 500-1000 MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                // Clear cache button
+                FilledTonalButton(
+                    onClick = {
+                        // TODO: Implement cache clearing functionality
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Clear Cache")
+                }
+            }
+        }
+    }
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface PlexCacheSettingsEntryPoint {
+    fun userPreferencesRepository(): UserPreferencesRepository
+}
+
+@Composable
+private fun MusicSourceSelection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    val userPreferencesRepository = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            PlexCacheSettingsEntryPoint::class.java
+        ).userPreferencesRepository()
+    }
+    
+    val musicSourcePreference by userPreferencesRepository.musicSourcePreferenceFlow
+        .collectAsState(initial = MusicSourcePreference.LOCAL_ONLY)
+    
+    PlexSectionCard(
+        title = "Music Source",
+        icon = Icons.Rounded.LibraryMusic
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Choose which music sources to use in your library",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            MusicSourceOption(
+                title = "Local Files Only",
+                description = "Use only music stored on this device",
+                isSelected = musicSourcePreference == MusicSourcePreference.LOCAL_ONLY,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.LOCAL_ONLY)
+                    }
+                }
+            )
+            
+            MusicSourceOption(
+                title = "Plex Server Only",
+                description = "Stream music from Plex server exclusively",
+                isSelected = musicSourcePreference == MusicSourcePreference.PLEX_ONLY,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.PLEX_ONLY)
+                    }
+                }
+            )
+            
+            MusicSourceOption(
+                title = "Both Sources",
+                description = "Combine local files and Plex server music",
+                isSelected = musicSourcePreference == MusicSourcePreference.BOTH,
+                onClick = {
+                    scope.launch {
+                        userPreferencesRepository.setMusicSourcePreference(MusicSourcePreference.BOTH)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MusicSourceOption(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
             }

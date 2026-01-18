@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 
 /**
  * ViewModel for managing Plex authentication and music library state.
@@ -26,7 +27,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PlexViewModel @Inject constructor(
     private val plexAuthManager: PlexAuthManager,
-    private val plexMusicRepository: PlexMusicRepository
+    private val plexMusicRepository: PlexMusicRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     private val TAG = "PlexViewModel"
@@ -81,6 +83,12 @@ class PlexViewModel @Inject constructor(
                 onSuccess = {
                     _loginUiState.value = _loginUiState.value.copy(isLoading = false)
                     Timber.tag(TAG).d("Sign in successful")
+                    // Save username to preferences
+                    val authState = plexAuthManager.authState.value
+                    if (authState is PlexAuthState.Authenticated) {
+                        userPreferencesRepository.setPlexUsername(authState.user.username)
+                        userPreferencesRepository.setPlexEnabled(true)
+                    }
                     // Automatically discover servers after sign in
                     discoverServers()
                 },
@@ -101,6 +109,9 @@ class PlexViewModel @Inject constructor(
     fun signOut() {
         viewModelScope.launch {
             plexMusicRepository.signOut()
+            // Clear preferences
+            userPreferencesRepository.clearPlexSettings()
+            userPreferencesRepository.setPlexEnabled(false)
         }
     }
 
@@ -138,6 +149,9 @@ class PlexViewModel @Inject constructor(
             
             plexMusicRepository.selectServer(server)
             
+            // Save server to preferences
+            userPreferencesRepository.setPlexServer(server.id, server.name)
+            
             // Fetch music sections for the selected server
             val result = plexMusicRepository.fetchMusicSections()
             
@@ -168,6 +182,9 @@ class PlexViewModel @Inject constructor(
             _error.value = null
             
             plexMusicRepository.selectMusicSection(section)
+            
+            // Save section to preferences
+            userPreferencesRepository.setPlexMusicSection(section.key, section.title)
             
             _isLoading.value = false
             Timber.tag(TAG).d("Selected music section: ${section.title}")

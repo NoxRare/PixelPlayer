@@ -251,7 +251,11 @@ fun SettingsScreen(
             item {
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 ExpressiveSettingsGroup {
-                    val mainCategories = SettingsCategory.entries.filter { it != SettingsCategory.ABOUT && it != SettingsCategory.EQUALIZER }
+                    val mainCategories = SettingsCategory.entries.filter { 
+                        it != SettingsCategory.ABOUT && 
+                        it != SettingsCategory.EQUALIZER && 
+                        it != SettingsCategory.PLEX_INTEGRATION 
+                    }
                     
                     mainCategories.forEachIndexed { index, category ->
                         val colors = getCategoryColors(category, isDark)
@@ -274,6 +278,16 @@ fun SettingsScreen(
                         }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Plex Integration Category (Standalone)
+                ExpressiveCategoryItem(
+                    category = SettingsCategory.PLEX_INTEGRATION,
+                    customColors = getCategoryColors(SettingsCategory.PLEX_INTEGRATION, isDark),
+                    onClick = { navController.navigate(Screen.PlexSettings.route) }, // Direct navigation
+                    shape = RoundedCornerShape(24.dp)
+                )
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
@@ -430,6 +444,7 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
             SettingsCategory.PLAYBACK -> Color(0xFF633B48) to Color(0xFFFFD8EC) 
             SettingsCategory.AI_INTEGRATION -> Color(0xFF004F58) to Color(0xFF88FAFF) 
             SettingsCategory.DEVELOPER -> Color(0xFF324F34) to Color(0xFFCBEFD0) 
+            SettingsCategory.PLEX_INTEGRATION -> Color(0xFF2B4B73) to Color(0xFFB8D4FF)
             SettingsCategory.EQUALIZER -> Color(0xFF6E4E13) to Color(0xFFFFDEAC) 
             SettingsCategory.ABOUT -> Color(0xFF3F474D) to Color(0xFFDEE3EB) 
         }
@@ -440,6 +455,7 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
             SettingsCategory.PLAYBACK -> Color(0xFFFFD8EC) to Color(0xFF631B4B)
             SettingsCategory.AI_INTEGRATION -> Color(0xFFCCE8EA) to Color(0xFF004F58)
             SettingsCategory.DEVELOPER -> Color(0xFFCBEFD0) to Color(0xFF042106)
+            SettingsCategory.PLEX_INTEGRATION -> Color(0xFFB8D4FF) to Color(0xFF1A3E5F)
             SettingsCategory.EQUALIZER -> Color(0xFFFFDEAC) to Color(0xFF281900)
             SettingsCategory.ABOUT -> Color(0xFFEFF1F7) to Color(0xFF44474F)
         }
