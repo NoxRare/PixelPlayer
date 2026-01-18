@@ -136,6 +136,12 @@ class PlexAuthManager @Inject constructor(
                     )
                     
                     val user = userResponse.user
+                    if (user == null) {
+                        Timber.tag(TAG).e("OAuth authentication failed: user info is null")
+                        _authState.value = PlexAuthState.Error("Authentication failed: invalid user data")
+                        return@withContext Result.failure(Exception("Authentication failed: user data is null"))
+                    }
+                    
                     saveAuthToken(user.authToken, user.username, user.email)
                     _authState.value = PlexAuthState.Authenticated(user)
                     
@@ -178,6 +184,12 @@ class PlexAuthManager @Inject constructor(
             )
             
             val user = response.user
+            if (user == null) {
+                Timber.tag(TAG).e("Sign in failed: user info is null")
+                _authState.value = PlexAuthState.Error("Authentication failed: invalid user data")
+                return@withContext Result.failure(Exception("Authentication failed: user data is null"))
+            }
+            
             saveAuthToken(user.authToken, user.username, user.email)
             _authState.value = PlexAuthState.Authenticated(user)
             
