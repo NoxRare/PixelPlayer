@@ -1,5 +1,7 @@
 package com.theveloper.pixelplay.presentation.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -59,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +74,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -85,14 +89,14 @@ import com.theveloper.pixelplay.data.network.plex.PlexLibrarySection
 import com.theveloper.pixelplay.data.network.plex.PlexServer
 import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
-import com.theveloper.pixelplay.presentation.viewmodel.LoginField
 import com.theveloper.pixelplay.presentation.viewmodel.PlexViewModel
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import kotlin.math.roundToInt
 
 /**
  * Screen for managing Plex integration settings.
- * Allows users to sign in to Plex, select servers, and choose music libraries.
+ * Allows users to sign in to Plex via OAuth, select servers, and choose music libraries.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,16 +105,29 @@ fun PlexSettingsScreen(
     viewModel: PlexViewModel = hiltViewModel()
 ) {
     val authState by viewModel.authState.collectAsState()
-    val loginUiState by viewModel.loginUiState.collectAsState()
+    val oauthUiState by viewModel.oauthUiState.collectAsState()
     val availableServers by viewModel.availableServers.collectAsState()
     val selectedServer by viewModel.selectedServer.collectAsState()
     val musicSections by viewModel.musicSections.collectAsState()
     val selectedMusicSection by viewModel.selectedMusicSection.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val context = LocalContext.current
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
     val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    // Handle OAuth URL opening
+    LaunchedEffect(oauthUiState.oauthUrl) {
+        oauthUiState.oauthUrl?.let { url ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Timber.tag("PlexSettingsScreen").e(e, "Failed to open OAuth URL")
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -139,19 +156,15 @@ fun PlexSettingsScreen(
             when (val state = authState) {
                 is PlexAuthState.NotAuthenticated,
                 is PlexAuthState.Error -> {
-                    PlexLoginContent(
-                        login = loginUiState.login,
-                        password = loginUiState.password,
-                        isLoading = loginUiState.isLoading,
-                        error = loginUiState.error ?: (state as? PlexAuthState.Error)?.message,
-                        onLoginChange = { viewModel.updateLoginField(LoginField.LOGIN, it) },
-                        onPasswordChange = { viewModel.updateLoginField(LoginField.PASSWORD, it) },
-                        onSignIn = { viewModel.signIn(loginUiState.login, loginUiState.password) },
+                    PlexOAuthContent(
+                        isLoading = oauthUiState.isLoading,
+                        error = oauthUiState.error ?: (state as? PlexAuthState.Error)?.message,
+                        onSignIn = { viewModel.startOAuth() },
                         onClearError = { viewModel.clearError() }
                     )
                 }
                 is PlexAuthState.Authenticating -> {
-                    PlexLoadingContent(message = "Signing in...")
+                    PlexLoadingContent(message = "Authenticating...")
                 }
                 is PlexAuthState.Authenticated -> {
                     PlexAuthenticatedContent(
@@ -176,19 +189,12 @@ fun PlexSettingsScreen(
 }
 
 @Composable
-private fun PlexLoginContent(
-    login: String,
-    password: String,
+private fun PlexOAuthContent(
     isLoading: Boolean,
     error: String?,
-    onLoginChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
     onSignIn: () -> Unit,
     onClearError: () -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
-    var passwordVisible by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -221,83 +227,47 @@ private fun PlexLoginContent(
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = login,
-            onValueChange = { 
-                onLoginChange(it)
-                if (error != null) onClearError()
-            },
-            label = { Text("Email or Username") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-            ),
-            enabled = !isLoading,
-            isError = error != null
-        )
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = password,
-            onValueChange = { 
-                onPasswordChange(it)
-                if (error != null) onClearError()
-            },
-            label = { Text("Password") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = { 
-                    focusManager.clearFocus()
-                    if (login.isNotBlank() && password.isNotBlank()) {
-                        onSignIn()
-                    }
-                }
-            ),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                    )
-                }
-            },
-            enabled = !isLoading,
-            isError = error != null
+        Text(
+            text = "You'll be redirected to Plex.tv to sign in securely with your account.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
+
+        Spacer(modifier = Modifier.height(32.dp))
 
         AnimatedVisibility(
             visible = error != null,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            Text(
-                text = error ?: "",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Text(
+                    text = error ?: "",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
         Button(
-            onClick = onSignIn,
+            onClick = {
+                if (error != null) onClearError()
+                onSignIn()
+            },
             modifier = Modifier.fillMaxWidth(),
-            enabled = login.isNotBlank() && password.isNotBlank() && !isLoading
+            enabled = !isLoading
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -305,10 +275,28 @@ private fun PlexLoginContent(
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Waiting for authentication...")
             } else {
-                Text("Sign In")
+                Icon(
+                    imageVector = Icons.Rounded.Cloud,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Sign in with Plex")
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Your credentials are never stored in the app. Authentication is handled securely through Plex.tv.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
     }
 }
 

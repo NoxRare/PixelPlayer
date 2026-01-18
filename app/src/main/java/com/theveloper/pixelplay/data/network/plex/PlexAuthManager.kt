@@ -6,6 +6,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,7 @@ import javax.inject.Singleton
 
 /**
  * Manages Plex authentication and server discovery.
- * Handles sign-in, token storage, and server selection.
+ * Handles OAuth sign-in, token storage, and server selection.
  * Uses EncryptedSharedPreferences for secure token storage.
  */
 @Singleton
@@ -74,11 +75,95 @@ class PlexAuthManager @Inject constructor(
     }
 
     /**
+     * Start OAuth flow by requesting a PIN.
+     * Returns the PIN code and ID for the user to authenticate.
+     * @return Result containing OAuth PIN response
+     */
+    suspend fun startOAuth(): Result<PlexOAuthPinResponse> = withContext(Dispatchers.IO) {
+        try {
+            _authState.value = PlexAuthState.Authenticating
+            
+            val pinResponse = plexAuthApiService.requestOAuthPin(
+                clientIdentifier = clientIdentifier
+            )
+            
+            Timber.tag(TAG).d("OAuth PIN requested: ${pinResponse.code}")
+            Result.success(pinResponse)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to request OAuth PIN")
+            _authState.value = PlexAuthState.Error(e.message ?: "Failed to start OAuth")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Build the OAuth URL for user authentication.
+     * @param pinId The PIN ID from startOAuth
+     * @param pinCode The PIN code from startOAuth
+     * @return OAuth URL to open in browser
+     */
+    fun buildOAuthUrl(pinId: Int, pinCode: String): String {
+        return "https://app.plex.tv/auth#?clientID=$clientIdentifier&code=$pinCode&context[device][product]=PixelPlayer&context[device][platform]=Android"
+    }
+
+    /**
+     * Poll the OAuth PIN to check if user has authenticated.
+     * Call this repeatedly after user opens the OAuth URL.
+     * @param pinId The PIN ID from startOAuth
+     * @param maxAttempts Maximum number of polling attempts
+     * @param delayMs Delay between polling attempts in milliseconds
+     * @return Result indicating success or failure with user info
+     */
+    suspend fun pollOAuthPin(
+        pinId: Int,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): Result<PlexUser> = withContext(Dispatchers.IO) {
+        try {
+            repeat(maxAttempts) { attempt ->
+                delay(delayMs)
+                
+                val checkResponse = plexAuthApiService.checkOAuthPin(
+                    pinId = pinId,
+                    clientIdentifier = clientIdentifier
+                )
+                
+                if (checkResponse.authToken != null) {
+                    // User has authenticated, get user info
+                    val userResponse = plexAuthApiService.getUserInfo(
+                        authToken = checkResponse.authToken,
+                        clientIdentifier = clientIdentifier
+                    )
+                    
+                    val user = userResponse.user
+                    saveAuthToken(user.authToken, user.username, user.email)
+                    _authState.value = PlexAuthState.Authenticated(user)
+                    
+                    Timber.tag(TAG).d("OAuth authentication successful for ${user.username}")
+                    return@withContext Result.success(user)
+                }
+                
+                Timber.tag(TAG).d("OAuth polling attempt ${attempt + 1}/$maxAttempts")
+            }
+            
+            // Timeout
+            _authState.value = PlexAuthState.Error("Authentication timeout")
+            Result.failure(Exception("Authentication timeout - user did not complete OAuth"))
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to poll OAuth PIN")
+            _authState.value = PlexAuthState.Error(e.message ?: "Authentication failed")
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Sign in to Plex.tv with email/username and password.
+     * DEPRECATED: Use OAuth flow instead (startOAuth + pollOAuthPin).
      * @param login Email or username
      * @param password User's password
      * @return Result indicating success or failure with error message
      */
+    @Deprecated("Use OAuth flow instead")
     suspend fun signIn(login: String, password: String): Result<PlexUser> = withContext(Dispatchers.IO) {
         try {
             _authState.value = PlexAuthState.Authenticating
