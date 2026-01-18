@@ -1,6 +1,9 @@
 package com.theveloper.pixelplay.data.network.plex
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +19,7 @@ import javax.inject.Singleton
 /**
  * Manages Plex authentication and server discovery.
  * Handles sign-in, token storage, and server selection.
+ * Uses EncryptedSharedPreferences for secure token storage.
  */
 @Singleton
 class PlexAuthManager @Inject constructor(
@@ -24,11 +28,31 @@ class PlexAuthManager @Inject constructor(
 ) {
     private val TAG = "PlexAuthManager"
 
+    // Encrypted SharedPreferences for secure token storage
+    private val encryptedPrefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            
+            EncryptedSharedPreferences.create(
+                context,
+                PLEX_SECURE_PREFS,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Fallback to regular SharedPreferences if encryption fails
+            Timber.tag(TAG).w(e, "Failed to create encrypted prefs, falling back to regular prefs")
+            context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE)
+        }
+    }
+
     // Client identifier persisted across sessions for consistent device recognition
     private val clientIdentifier: String by lazy {
-        val prefs = context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE)
-        prefs.getString(KEY_CLIENT_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString(KEY_CLIENT_ID, it).apply()
+        encryptedPrefs.getString(KEY_CLIENT_ID, null) ?: UUID.randomUUID().toString().also {
+            encryptedPrefs.edit().putString(KEY_CLIENT_ID, it).apply()
         }
     }
 
@@ -167,8 +191,7 @@ class PlexAuthManager @Inject constructor(
      * Get the current auth token if available.
      */
     fun getAuthToken(): String? {
-        val prefs = context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_AUTH_TOKEN, null)
+        return encryptedPrefs.getString(KEY_AUTH_TOKEN, null)
     }
 
     /**
@@ -178,7 +201,9 @@ class PlexAuthManager @Inject constructor(
      * @return Complete streaming URL with authentication
      */
     fun buildStreamUrl(server: PlexServer, partKey: String): String {
-        return "${server.uri}$partKey?X-Plex-Token=${server.accessToken}"
+        val baseUri = server.uri.trimEnd('/')
+        val normalizedPath = if (partKey.startsWith('/')) partKey else "/$partKey"
+        return "$baseUri$normalizedPath?X-Plex-Token=${server.accessToken}"
     }
 
     /**
@@ -189,11 +214,13 @@ class PlexAuthManager @Inject constructor(
      */
     fun buildThumbnailUrl(server: PlexServer, thumbPath: String?): String? {
         if (thumbPath.isNullOrBlank()) return null
-        return "${server.uri}$thumbPath?X-Plex-Token=${server.accessToken}"
+        val baseUri = server.uri.trimEnd('/')
+        val normalizedPath = if (thumbPath.startsWith('/')) thumbPath else "/$thumbPath"
+        return "$baseUri$normalizedPath?X-Plex-Token=${server.accessToken}"
     }
 
     private fun saveAuthToken(token: String, username: String, email: String) {
-        context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE).edit()
+        encryptedPrefs.edit()
             .putString(KEY_AUTH_TOKEN, token)
             .putString(KEY_USERNAME, username)
             .putString(KEY_EMAIL, email)
@@ -201,7 +228,7 @@ class PlexAuthManager @Inject constructor(
     }
 
     private fun saveSelectedServer(server: PlexServer) {
-        context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE).edit()
+        encryptedPrefs.edit()
             .putString(KEY_SERVER_ID, server.id)
             .putString(KEY_SERVER_NAME, server.name)
             .putString(KEY_SERVER_URI, server.uri)
@@ -212,17 +239,16 @@ class PlexAuthManager @Inject constructor(
     }
 
     private fun saveSelectedMusicSection(section: PlexLibrarySection) {
-        context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE).edit()
+        encryptedPrefs.edit()
             .putString(KEY_MUSIC_SECTION_KEY, section.key)
             .putString(KEY_MUSIC_SECTION_TITLE, section.title)
             .apply()
     }
 
     private fun restoreAuthState() {
-        val prefs = context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE)
-        val token = prefs.getString(KEY_AUTH_TOKEN, null)
-        val username = prefs.getString(KEY_USERNAME, null)
-        val email = prefs.getString(KEY_EMAIL, null)
+        val token = encryptedPrefs.getString(KEY_AUTH_TOKEN, null)
+        val username = encryptedPrefs.getString(KEY_USERNAME, null)
+        val email = encryptedPrefs.getString(KEY_EMAIL, null)
 
         if (token != null && username != null && email != null) {
             // Create a minimal PlexUser for restored state
@@ -238,10 +264,10 @@ class PlexAuthManager @Inject constructor(
             _authState.value = PlexAuthState.Authenticated(user)
 
             // Restore selected server if available
-            val serverId = prefs.getString(KEY_SERVER_ID, null)
-            val serverName = prefs.getString(KEY_SERVER_NAME, null)
-            val serverUri = prefs.getString(KEY_SERVER_URI, null)
-            val serverToken = prefs.getString(KEY_SERVER_TOKEN, null)
+            val serverId = encryptedPrefs.getString(KEY_SERVER_ID, null)
+            val serverName = encryptedPrefs.getString(KEY_SERVER_NAME, null)
+            val serverUri = encryptedPrefs.getString(KEY_SERVER_URI, null)
+            val serverToken = encryptedPrefs.getString(KEY_SERVER_TOKEN, null)
 
             if (serverId != null && serverName != null && serverUri != null && serverToken != null) {
                 _selectedServer.value = PlexServer(
@@ -249,14 +275,14 @@ class PlexAuthManager @Inject constructor(
                     name = serverName,
                     uri = serverUri,
                     accessToken = serverToken,
-                    owned = prefs.getBoolean(KEY_SERVER_OWNED, false),
-                    isLocal = prefs.getBoolean(KEY_SERVER_LOCAL, false)
+                    owned = encryptedPrefs.getBoolean(KEY_SERVER_OWNED, false),
+                    isLocal = encryptedPrefs.getBoolean(KEY_SERVER_LOCAL, false)
                 )
             }
 
             // Restore selected music section if available
-            val sectionKey = prefs.getString(KEY_MUSIC_SECTION_KEY, null)
-            val sectionTitle = prefs.getString(KEY_MUSIC_SECTION_TITLE, null)
+            val sectionKey = encryptedPrefs.getString(KEY_MUSIC_SECTION_KEY, null)
+            val sectionTitle = encryptedPrefs.getString(KEY_MUSIC_SECTION_TITLE, null)
             if (sectionKey != null && sectionTitle != null) {
                 _selectedMusicSection.value = PlexLibrarySection(
                     key = sectionKey,
@@ -268,7 +294,7 @@ class PlexAuthManager @Inject constructor(
     }
 
     private fun clearAuthData() {
-        context.getSharedPreferences(PLEX_PREFS, Context.MODE_PRIVATE).edit()
+        encryptedPrefs.edit()
             .remove(KEY_AUTH_TOKEN)
             .remove(KEY_USERNAME)
             .remove(KEY_EMAIL)
@@ -285,6 +311,7 @@ class PlexAuthManager @Inject constructor(
 
     companion object {
         private const val PLEX_PREFS = "plex_preferences"
+        private const val PLEX_SECURE_PREFS = "plex_secure_preferences"
         private const val KEY_CLIENT_ID = "plex_client_id"
         private const val KEY_AUTH_TOKEN = "plex_auth_token"
         private const val KEY_USERNAME = "plex_username"

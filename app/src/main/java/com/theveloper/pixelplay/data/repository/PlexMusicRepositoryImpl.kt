@@ -12,6 +12,7 @@ import com.theveloper.pixelplay.data.network.plex.PlexAuthState
 import com.theveloper.pixelplay.data.network.plex.PlexLibrarySection
 import com.theveloper.pixelplay.data.network.plex.PlexServer
 import com.theveloper.pixelplay.data.network.plex.PlexTrack
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +21,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import timber.log.Timber
+import java.io.IOException
+import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,11 +50,20 @@ class PlexMusicRepositoryImpl @Inject constructor(
     private val _cachedAlbums = MutableStateFlow<List<PlexAlbum>>(emptyList())
     private val _cachedArtists = MutableStateFlow<List<PlexArtist>>(emptyList())
 
-    override val isAuthenticated: StateFlow<Boolean>
-        get() = MutableStateFlow(plexAuthManager.authState.value is PlexAuthState.Authenticated)
-            .also { flow ->
-                // Update based on auth state changes
+    // Map auth state to boolean for isAuthenticated
+    private val _isAuthenticated = MutableStateFlow(false)
+    override val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
+
+    private val repositoryScope = CoroutineScope(Dispatchers.Main)
+
+    init {
+        // Observe auth state changes and update isAuthenticated
+        repositoryScope.launch {
+            plexAuthManager.authState.collect { state ->
+                _isAuthenticated.value = state is PlexAuthState.Authenticated
             }
+        }
+    }
 
     override val availableServers: StateFlow<List<PlexServer>> = plexAuthManager.servers
 
@@ -87,7 +101,7 @@ class PlexMusicRepositoryImpl @Inject constructor(
             val server = plexAuthManager.selectedServer.value
                 ?: return@withContext Result.failure(IllegalStateException("No server selected"))
 
-            val sectionsUrl = "${server.uri}/library/sections"
+            val sectionsUrl = buildServerUrl(server.uri, "/library/sections")
             val response = plexApiService.getLibrarySections(sectionsUrl, server.accessToken)
 
             val musicSections = response.mediaContainer.directories
@@ -97,6 +111,18 @@ class PlexMusicRepositoryImpl @Inject constructor(
             _musicSections.value = musicSections
             Timber.tag(TAG).d("Found ${musicSections.size} music sections")
             Result.success(musicSections)
+        } catch (e: HttpException) {
+            val errorMessage = when (e.code()) {
+                401 -> "Authentication failed. Please sign in again."
+                403 -> "Access denied to this server."
+                404 -> "Server not found."
+                else -> "Server error: ${e.message()}"
+            }
+            Timber.tag(TAG).e(e, "HTTP error fetching music sections: ${e.code()}")
+            Result.failure(Exception(errorMessage, e))
+        } catch (e: IOException) {
+            Timber.tag(TAG).e(e, "Network error fetching music sections")
+            Result.failure(Exception("Network error. Please check your connection.", e))
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to fetch music sections")
             Result.failure(e)
@@ -188,22 +214,26 @@ class PlexMusicRepositoryImpl @Inject constructor(
                 return@withContext
             }
 
-            // Fetch all tracks
-            val tracksUrl = "${server.uri}/library/sections/${section.key}/all?type=10"
+            // Fetch all tracks (type=10 is tracks in Plex API)
+            val tracksUrl = buildServerUrl(server.uri, "/library/sections/${section.key}/all?type=10")
             val tracksResponse = plexApiService.getAllTracks(tracksUrl, server.accessToken)
             _cachedTracks.value = tracksResponse.mediaContainer.metadata ?: emptyList()
 
-            // Fetch all albums
-            val albumsUrl = "${server.uri}/library/sections/${section.key}/all?type=9"
+            // Fetch all albums (type=9 is albums in Plex API)
+            val albumsUrl = buildServerUrl(server.uri, "/library/sections/${section.key}/all?type=9")
             val albumsResponse = plexApiService.getAllAlbums(albumsUrl, server.accessToken)
             _cachedAlbums.value = albumsResponse.mediaContainer.metadata ?: emptyList()
 
-            // Fetch all artists
-            val artistsUrl = "${server.uri}/library/sections/${section.key}/all?type=8"
+            // Fetch all artists (type=8 is artists in Plex API)
+            val artistsUrl = buildServerUrl(server.uri, "/library/sections/${section.key}/all?type=8")
             val artistsResponse = plexApiService.getAllArtists(artistsUrl, server.accessToken)
             _cachedArtists.value = artistsResponse.mediaContainer.metadata ?: emptyList()
 
             Timber.tag(TAG).d("Refreshed Plex library: ${_cachedTracks.value.size} tracks, ${_cachedAlbums.value.size} albums, ${_cachedArtists.value.size} artists")
+        } catch (e: HttpException) {
+            Timber.tag(TAG).e(e, "HTTP error refreshing Plex library: ${e.code()}")
+        } catch (e: IOException) {
+            Timber.tag(TAG).e(e, "Network error refreshing Plex library")
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to refresh Plex library")
         }
@@ -288,5 +318,15 @@ class PlexMusicRepositoryImpl @Inject constructor(
             songCount = 0, // Would need additional API call to get accurate count
             imageUrl = artistImageUrl
         )
+    }
+
+    /**
+     * Safely build a URL by combining a base server URI with a path.
+     * Ensures proper handling of trailing/leading slashes.
+     */
+    private fun buildServerUrl(baseUri: String, path: String): String {
+        val normalizedBase = baseUri.trimEnd('/')
+        val normalizedPath = if (path.startsWith('/')) path else "/$path"
+        return "$normalizedBase$normalizedPath"
     }
 }
