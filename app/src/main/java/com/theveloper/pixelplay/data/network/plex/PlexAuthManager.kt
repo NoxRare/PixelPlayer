@@ -130,17 +130,10 @@ class PlexAuthManager @Inject constructor(
                 
                 if (checkResponse.authToken != null) {
                     // User has authenticated, get user info
-                    val userResponse = plexAuthApiService.getUserInfo(
+                    val user = plexAuthApiService.getUserInfo(
                         authToken = checkResponse.authToken,
                         clientIdentifier = clientIdentifier
                     )
-                    
-                    val user = userResponse.user
-                    if (user == null) {
-                        Timber.tag(TAG).e("OAuth authentication failed: user data is missing")
-                        _authState.value = PlexAuthState.Error("Authentication failed: user data is missing")
-                        return@withContext Result.failure(Exception("Authentication failed: user data is missing"))
-                    }
                     
                     saveAuthToken(user.authToken, user.username, user.email)
                     _authState.value = PlexAuthState.Authenticated(user)
