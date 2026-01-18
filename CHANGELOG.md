@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fixed Plex Connect NullPointerException when logging in and returning to the app
+
 ## [0.5.0-beta] - 2026-01-14
 
 ### Added

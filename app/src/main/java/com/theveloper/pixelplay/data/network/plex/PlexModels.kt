@@ -7,7 +7,7 @@ import com.google.gson.annotations.SerializedName
  * Contains the user's auth token for accessing Plex servers.
  */
 data class PlexAuthResponse(
-    @SerializedName("user") val user: PlexUser
+    @SerializedName("user") val user: PlexUser?
 )
 
 /**
