@@ -1,0 +1,663 @@
+package com.theveloper.pixelplay.presentation.screens
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.theveloper.pixelplay.data.network.plex.PlexAuthState
+import com.theveloper.pixelplay.data.network.plex.PlexLibrarySection
+import com.theveloper.pixelplay.data.network.plex.PlexServer
+import com.theveloper.pixelplay.presentation.viewmodel.LoginField
+import com.theveloper.pixelplay.presentation.viewmodel.PlexViewModel
+
+/**
+ * Screen for managing Plex integration settings.
+ * Allows users to sign in to Plex, select servers, and choose music libraries.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlexSettingsScreen(
+    onBackClick: () -> Unit,
+    viewModel: PlexViewModel = hiltViewModel()
+) {
+    val authState by viewModel.authState.collectAsState()
+    val loginUiState by viewModel.loginUiState.collectAsState()
+    val availableServers by viewModel.availableServers.collectAsState()
+    val selectedServer by viewModel.selectedServer.collectAsState()
+    val musicSections by viewModel.musicSections.collectAsState()
+    val selectedMusicSection by viewModel.selectedMusicSection.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Plex Integration") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            when (val state = authState) {
+                is PlexAuthState.NotAuthenticated,
+                is PlexAuthState.Error -> {
+                    PlexLoginContent(
+                        login = loginUiState.login,
+                        password = loginUiState.password,
+                        isLoading = loginUiState.isLoading,
+                        error = loginUiState.error ?: (state as? PlexAuthState.Error)?.message,
+                        onLoginChange = { viewModel.updateLoginField(LoginField.LOGIN, it) },
+                        onPasswordChange = { viewModel.updateLoginField(LoginField.PASSWORD, it) },
+                        onSignIn = { viewModel.signIn(loginUiState.login, loginUiState.password) },
+                        onClearError = { viewModel.clearError() }
+                    )
+                }
+                is PlexAuthState.Authenticating -> {
+                    PlexLoadingContent(message = "Signing in...")
+                }
+                is PlexAuthState.Authenticated -> {
+                    PlexAuthenticatedContent(
+                        username = state.user.username,
+                        availableServers = availableServers,
+                        selectedServer = selectedServer,
+                        musicSections = musicSections,
+                        selectedMusicSection = selectedMusicSection,
+                        isLoading = isLoading,
+                        error = error,
+                        onServerSelect = { viewModel.selectServer(it) },
+                        onMusicSectionSelect = { viewModel.selectMusicSection(it) },
+                        onRefreshServers = { viewModel.discoverServers() },
+                        onRefreshLibrary = { viewModel.refreshLibrary() },
+                        onSignOut = { viewModel.signOut() },
+                        navBarPadding = navBarPadding.calculateBottomPadding()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlexLoginContent(
+    login: String,
+    password: String,
+    isLoading: Boolean,
+    error: String?,
+    onLoginChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSignIn: () -> Unit,
+    onClearError: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Plex logo/icon
+        Icon(
+            imageVector = Icons.Rounded.Cloud,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Connect to Plex",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Sign in with your Plex account to stream music from your servers",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        OutlinedTextField(
+            value = login,
+            onValueChange = { 
+                onLoginChange(it)
+                if (error != null) onClearError()
+            },
+            label = { Text("Email or Username") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+            ),
+            enabled = !isLoading,
+            isError = error != null
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = { 
+                onPasswordChange(it)
+                if (error != null) onClearError()
+            },
+            label = { Text("Password") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { 
+                    focusManager.clearFocus()
+                    if (login.isNotBlank() && password.isNotBlank()) {
+                        onSignIn()
+                    }
+                }
+            ),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                    )
+                }
+            },
+            enabled = !isLoading,
+            isError = error != null
+        )
+
+        AnimatedVisibility(
+            visible = error != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Text(
+                text = error ?: "",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = onSignIn,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = login.isNotBlank() && password.isNotBlank() && !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Text("Sign In")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlexLoadingContent(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlexAuthenticatedContent(
+    username: String,
+    availableServers: List<PlexServer>,
+    selectedServer: PlexServer?,
+    musicSections: List<PlexLibrarySection>,
+    selectedMusicSection: PlexLibrarySection?,
+    isLoading: Boolean,
+    error: String?,
+    onServerSelect: (PlexServer) -> Unit,
+    onMusicSectionSelect: (PlexLibrarySection) -> Unit,
+    onRefreshServers: () -> Unit,
+    onRefreshLibrary: () -> Unit,
+    onSignOut: () -> Unit,
+    navBarPadding: androidx.compose.ui.unit.Dp
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 16.dp,
+            bottom = navBarPadding + 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Account section
+        item {
+            PlexSectionCard(
+                title = "Account",
+                icon = Icons.Rounded.Cloud
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Signed in as",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = username,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    FilledTonalButton(onClick = onSignOut) {
+                        Icon(
+                            imageVector = Icons.Rounded.Logout,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign Out")
+                    }
+                }
+            }
+        }
+
+        // Servers section
+        item {
+            PlexSectionCard(
+                title = "Servers",
+                icon = Icons.Rounded.Computer,
+                action = {
+                    IconButton(onClick = onRefreshServers, enabled = !isLoading) {
+                        if (isLoading && selectedServer == null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = "Refresh servers"
+                            )
+                        }
+                    }
+                }
+            ) {
+                if (availableServers.isEmpty()) {
+                    Text(
+                        text = if (isLoading) "Discovering servers..." else "No servers found. Tap refresh to discover servers.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        availableServers.forEach { server ->
+                            PlexServerItem(
+                                server = server,
+                                isSelected = selectedServer?.id == server.id,
+                                onClick = { onServerSelect(server) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Music Library section (only show if server is selected)
+        if (selectedServer != null) {
+            item {
+                PlexSectionCard(
+                    title = "Music Library",
+                    icon = Icons.Rounded.LibraryMusic,
+                    action = {
+                        if (selectedMusicSection != null) {
+                            IconButton(onClick = onRefreshLibrary, enabled = !isLoading) {
+                                if (isLoading && selectedServer != null) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = "Refresh library"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    if (musicSections.isEmpty()) {
+                        Text(
+                            text = if (isLoading) "Loading music sections..." else "No music libraries found on this server.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            musicSections.forEach { section ->
+                                PlexMusicSectionItem(
+                                    section = section,
+                                    isSelected = selectedMusicSection?.key == section.key,
+                                    onClick = { onMusicSectionSelect(section) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Error display
+        if (error != null) {
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = error,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlexSectionCard(
+    title: String,
+    icon: ImageVector,
+    action: @Composable (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                action?.invoke()
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PlexServerItem(
+    server: PlexServer,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (server.isLocal) Icons.Rounded.Computer else Icons.Rounded.Cloud,
+                    contentDescription = null,
+                    tint = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Column {
+                    Text(
+                        text = server.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    Text(
+                        text = if (server.isLocal) "Local" else if (server.owned) "Owned" else "Shared",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlexMusicSectionItem(
+    section: PlexLibrarySection,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.LibraryMusic,
+                    contentDescription = null,
+                    tint = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}

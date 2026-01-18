@@ -15,3 +15,17 @@ annotation class DeezerRetrofit
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class FastOkHttpClient
+
+/**
+ * Qualifier for Plex Auth API Retrofit instance.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class PlexAuthRetrofit
+
+/**
+ * Qualifier for Plex Media Server API Retrofit instance.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class PlexServerRetrofit

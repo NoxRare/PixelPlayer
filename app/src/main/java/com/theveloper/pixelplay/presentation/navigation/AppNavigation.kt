@@ -40,6 +40,7 @@ import com.theveloper.pixelplay.presentation.screens.StatsScreen
 import com.theveloper.pixelplay.presentation.screens.SettingsScreen
 import com.theveloper.pixelplay.presentation.screens.SettingsCategoryScreen
 import com.theveloper.pixelplay.presentation.screens.EqualizerScreen
+import com.theveloper.pixelplay.presentation.screens.PlexSettingsScreen
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.flow.first
@@ -359,6 +360,19 @@ fun AppNavigation(
                     EqualizerScreen(
                         navController = navController,
                         playerViewModel = playerViewModel
+                    )
+                }
+            }
+            composable(
+                Screen.PlexSettings.route,
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) {
+                ScreenWrapper(navController = navController) {
+                    PlexSettingsScreen(
+                        onBackClick = { navController.popBackStack() }
                     )
                 }
             }

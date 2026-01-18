@@ -21,11 +21,15 @@ import com.theveloper.pixelplay.data.preferences.dataStore
 import com.theveloper.pixelplay.data.media.SongMetadataEditor
 import com.theveloper.pixelplay.data.network.deezer.DeezerApiService
 import com.theveloper.pixelplay.data.network.lyrics.LrcLibApiService
+import com.theveloper.pixelplay.data.network.plex.PlexApiService
+import com.theveloper.pixelplay.data.network.plex.PlexAuthApiService
 import com.theveloper.pixelplay.data.repository.ArtistImageRepository
 import com.theveloper.pixelplay.data.repository.LyricsRepository
 import com.theveloper.pixelplay.data.repository.LyricsRepositoryImpl
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.repository.MusicRepositoryImpl
+import com.theveloper.pixelplay.data.repository.PlexMusicRepository
+import com.theveloper.pixelplay.data.repository.PlexMusicRepositoryImpl
 import com.theveloper.pixelplay.data.repository.TransitionRepository
 import com.theveloper.pixelplay.data.repository.TransitionRepositoryImpl
 import dagger.Module
@@ -353,5 +357,65 @@ object AppModule {
         musicDao: MusicDao
     ): ArtistImageRepository {
         return ArtistImageRepository(deezerApiService, musicDao)
+    }
+
+    // ===== Plex API Providers =====
+
+    /**
+     * Provides Retrofit instance for Plex.tv authentication API.
+     */
+    @Provides
+    @Singleton
+    @PlexAuthRetrofit
+    fun providePlexAuthRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://plex.tv/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    /**
+     * Provides the Plex.tv authentication API service.
+     */
+    @Provides
+    @Singleton
+    fun providePlexAuthApiService(@PlexAuthRetrofit retrofit: Retrofit): PlexAuthApiService {
+        return retrofit.create(PlexAuthApiService::class.java)
+    }
+
+    /**
+     * Provides Retrofit instance for Plex Media Server API.
+     * Uses a base URL that will be overridden by @Url parameters.
+     */
+    @Provides
+    @Singleton
+    @PlexServerRetrofit
+    fun providePlexServerRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://plex.tv/") // Placeholder, actual URLs are passed via @Url
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    /**
+     * Provides the Plex Media Server API service.
+     */
+    @Provides
+    @Singleton
+    fun providePlexApiService(@PlexServerRetrofit retrofit: Retrofit): PlexApiService {
+        return retrofit.create(PlexApiService::class.java)
+    }
+
+    /**
+     * Provides the Plex music repository.
+     */
+    @Provides
+    @Singleton
+    fun providePlexMusicRepository(
+        plexMusicRepositoryImpl: PlexMusicRepositoryImpl
+    ): PlexMusicRepository {
+        return plexMusicRepositoryImpl
     }
 }
