@@ -228,21 +228,23 @@ class MusicRepositoryImpl @Inject constructor(
     override fun getArtists(): Flow<List<Artist>> {
         LogUtils.d(this, "getArtists")
         return combine(
-            musicDao.getArtists(allowedParentDirs = emptyList(), applyDirectoryFilter = false),
-            permittedSongsFlow,
-            directoryFilterConfig,
-            allCrossRefsFlow,
+            combine(
+                musicDao.getArtists(allowedParentDirs = emptyList(), applyDirectoryFilter = false),
+                permittedSongsFlow,
+                directoryFilterConfig,
+                allCrossRefsFlow
+            ) { artists, allowedSongs, _, crossRefs ->
+                val allowedSongIds = allowedSongs.map { it.id }.toSet()
+                val allowedCrossRefs = crossRefs.filterBySongs(allowedSongIds)
+                val allowedArtistIds = allowedCrossRefs.map { it.artistId }.toMutableSet()
+                // Fallback to primary artist ids in case cross-refs are empty for some reason
+                allowedArtistIds.addAll(allowedSongs.map { it.artistId })
+                artists.filter { allowedArtistIds.contains(it.id) }
+                    .map { it.toArtist() }
+            },
             userPreferencesRepository.musicSourcePreferenceFlow,
             plexMusicRepository.getPlexArtists()
-        ) { artists, allowedSongs, _, crossRefs, musicSourcePref, plexArtists ->
-            val allowedSongIds = allowedSongs.map { it.id }.toSet()
-            val allowedCrossRefs = crossRefs.filterBySongs(allowedSongIds)
-            val allowedArtistIds = allowedCrossRefs.map { it.artistId }.toMutableSet()
-            // Fallback to primary artist ids in case cross-refs are empty for some reason
-            allowedArtistIds.addAll(allowedSongs.map { it.artistId })
-
-            val localArtists = artists.filter { allowedArtistIds.contains(it.id) }
-                .map { it.toArtist() }
+        ) { localArtists, musicSourcePref, plexArtists ->
             when (musicSourcePref) {
                 MusicSourcePreference.LOCAL_ONLY -> localArtists
                 MusicSourcePreference.PLEX_ONLY -> plexArtists
@@ -333,18 +335,21 @@ class MusicRepositoryImpl @Inject constructor(
     override fun searchSongs(query: String): Flow<List<Song>> {
         if (query.isBlank()) return flowOf(emptyList())
         return combine(
-            musicDao.searchSongs(
-                query = query,
-                allowedParentDirs = emptyList(),
-                applyDirectoryFilter = false
-            ),
-            directoryFilterConfig,
-            allArtistsFlow,
-            allCrossRefsFlow,
+            combine(
+                musicDao.searchSongs(
+                    query = query,
+                    allowedParentDirs = emptyList(),
+                    applyDirectoryFilter = false
+                ),
+                directoryFilterConfig,
+                allArtistsFlow,
+                allCrossRefsFlow
+            ) { songs, config, artists, crossRefs ->
+                mapSongList(songs, config, artists, crossRefs)
+            },
             userPreferencesRepository.musicSourcePreferenceFlow,
             plexMusicRepository.searchPlexSongs(query)
-        ) { songs, config, artists, crossRefs, musicSourcePref, plexSongs ->
-            val localSongs = mapSongList(songs, config, artists, crossRefs)
+        ) { localSongs, musicSourcePref, plexSongs ->
             when (musicSourcePref) {
                 MusicSourcePreference.LOCAL_ONLY -> localSongs
                 MusicSourcePreference.PLEX_ONLY -> plexSongs
@@ -387,25 +392,27 @@ class MusicRepositoryImpl @Inject constructor(
     override fun searchArtists(query: String): Flow<List<Artist>> {
         if (query.isBlank()) return flowOf(emptyList())
         return combine(
-            musicDao.searchArtists(
-                query = query,
-                allowedParentDirs = emptyList(),
-                applyDirectoryFilter = false
-            ),
-            permittedSongsFlow,
-            directoryFilterConfig,
-            allCrossRefsFlow,
+            combine(
+                musicDao.searchArtists(
+                    query = query,
+                    allowedParentDirs = emptyList(),
+                    applyDirectoryFilter = false
+                ),
+                permittedSongsFlow,
+                directoryFilterConfig,
+                allCrossRefsFlow
+            ) { artists, allowedSongs, _, crossRefs ->
+                val allowedSongIds = allowedSongs.map { it.id }.toSet()
+                val allowedCrossRefs = crossRefs.filterBySongs(allowedSongIds)
+                val allowedArtistIds = allowedCrossRefs.map { it.artistId }.toMutableSet()
+                allowedArtistIds.addAll(allowedSongs.map { it.artistId })
+                artists.filter { allowedArtistIds.contains(it.id) }
+                    .map { it.toArtist() }
+            },
             userPreferencesRepository.musicSourcePreferenceFlow,
             // Note: PlexMusicRepository doesn't have searchArtists, so we filter from getPlexArtists
             plexMusicRepository.getPlexArtists()
-        ) { artists, allowedSongs, _, crossRefs, musicSourcePref, plexArtists ->
-            val allowedSongIds = allowedSongs.map { it.id }.toSet()
-            val allowedCrossRefs = crossRefs.filterBySongs(allowedSongIds)
-            val allowedArtistIds = allowedCrossRefs.map { it.artistId }.toMutableSet()
-            allowedArtistIds.addAll(allowedSongs.map { it.artistId })
-
-            val localArtists = artists.filter { allowedArtistIds.contains(it.id) }
-                .map { it.toArtist() }
+        ) { localArtists, musicSourcePref, plexArtists ->
             // Filter plex artists by query
             val filteredPlexArtists = plexArtists.filter { 
                 it.name.contains(query, ignoreCase = true) 

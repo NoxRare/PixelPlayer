@@ -159,14 +159,16 @@ object AppModule {
         userPreferencesRepository: UserPreferencesRepository,
         searchHistoryDao: SearchHistoryDao,
         musicDao: MusicDao, // Añadir MusicDao como parámetro
-        lyricsRepository: LyricsRepository
+        lyricsRepository: LyricsRepository,
+        plexMusicRepository: PlexMusicRepository
     ): MusicRepository {
         return MusicRepositoryImpl(
             context = context,
             userPreferencesRepository = userPreferencesRepository,
             searchHistoryDao = searchHistoryDao,
             musicDao = musicDao,
-            lyricsRepository = lyricsRepository
+            lyricsRepository = lyricsRepository,
+            plexMusicRepository = plexMusicRepository
         )
     }
 
