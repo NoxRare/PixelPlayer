@@ -278,6 +278,8 @@ fun SetupScreen(
                         onStorageSelected = setupViewModel::selectStorage
                     )
                     SetupPage.PlexIntegration -> PlexIntegrationPage(
+                        uiState = uiState,
+                        onMusicSourceSelected = setupViewModel::setMusicSourcePreference,
                         onSkip = {
                             scope.launch {
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
@@ -945,6 +947,8 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
 
 @Composable
 fun PlexIntegrationPage(
+    uiState: SetupUiState,
+    onMusicSourceSelected: (com.theveloper.pixelplay.data.preferences.MusicSourcePreference) -> Unit,
     onSkip: () -> Unit,
     viewModel: PlexViewModel = hiltViewModel()
 ) {
@@ -984,112 +988,197 @@ fun PlexIntegrationPage(
     
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        // Icon Collage
-        PermissionIconCollage(
-            icons = plexIcons,
-            height = 120.dp
-        )
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Text(
-            text = "Connect to Plex",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        when (authState) {
-            is PlexAuthState.Authenticated -> {
-                Text(
-                    text = "Successfully connected!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Icon Collage
+            PermissionIconCollage(
+                icons = plexIcons,
+                height = 120.dp
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Text(
+                text = "Connect to Plex",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            when (authState) {
+                is PlexAuthState.Authenticated -> {
+                    Text(
+                        text = "Successfully connected!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                is PlexAuthState.Authenticating -> {
+                    Text(
+                        text = "Waiting for authentication...\nPlease complete sign-in in your browser.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CircularProgressIndicator()
+                }
+                else -> {
+                    Text(
+                        text = "Stream your music from a Plex Media Server. You can configure this now or later in settings.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            is PlexAuthState.Authenticating -> {
-                Text(
-                    text = "Waiting for authentication...\nPlease complete sign-in in your browser.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            
+            if (oauthUiState.error != null) {
                 Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator()
-            }
-            else -> {
-                Text(
-                    text = "Stream your music from a Plex Media Server. You can configure this now or later in settings.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        
-        if (oauthUiState.error != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = oauthUiState.error ?: "",
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(16.dp),
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Configure Now button (hidden if authenticated)
-        if (authState !is PlexAuthState.Authenticated) {
-            Button(
-                onClick = {
-                    viewModel.startOAuth()
-                },
-                modifier = Modifier.fillMaxWidth(0.7f),
-                enabled = !oauthUiState.isLoading && authState !is PlexAuthState.Authenticating
-            ) {
-                if (oauthUiState.isLoading || authState is PlexAuthState.Authenticating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = oauthUiState.error ?: "",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(16.dp),
+                        textAlign = TextAlign.Center
                     )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Configure Now button (hidden if authenticated)
+            if (authState !is PlexAuthState.Authenticated) {
+                Button(
+                    onClick = {
+                        viewModel.startOAuth()
+                    },
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                    enabled = !oauthUiState.isLoading && authState !is PlexAuthState.Authenticating
+                ) {
+                    if (oauthUiState.isLoading || authState is PlexAuthState.Authenticating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.rounded_cast_24),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Connect to Plex")
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                TextButton(
+                    onClick = {
+                        viewModel.cancelOAuth()
+                        onSkip()
+                    }
+                ) {
+                    Text("Skip for now")
+                }
+            }
+        }
+        
+        // Music source selection
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Music Source Preference",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "You can change this later in settings",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MusicSourceChip(
+                    label = "Local",
+                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.LOCAL_ONLY,
+                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.LOCAL_ONLY) },
+                    modifier = Modifier.weight(1f)
+                )
+                MusicSourceChip(
+                    label = "Plex",
+                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY,
+                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY) },
+                    modifier = Modifier.weight(1f)
+                )
+                MusicSourceChip(
+                    label = "Both",
+                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.BOTH,
+                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.BOTH) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MusicSourceChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        tonalElevation = if (isSelected) 4.dp else 0.dp
+    ) {
+        Box(
+            modifier = Modifier.padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
                 } else {
-                    Icon(
-                        painter = painterResource(R.drawable.rounded_cast_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Connect to Plex")
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            TextButton(
-                onClick = {
-                    viewModel.cancelOAuth()
-                    onSkip()
-                }
-            ) {
-                Text("Skip for now")
-            }
+            )
         }
     }
 }
