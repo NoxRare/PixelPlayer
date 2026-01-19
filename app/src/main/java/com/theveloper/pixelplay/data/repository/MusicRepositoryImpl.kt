@@ -72,7 +72,8 @@ class MusicRepositoryImpl @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val searchHistoryDao: SearchHistoryDao,
     private val musicDao: MusicDao,
-    private val lyricsRepository: LyricsRepository
+    private val lyricsRepository: LyricsRepository,
+    private val plexMusicRepository: PlexMusicRepository
 ) : MusicRepository {
 
     private val directoryScanMutex = Mutex()
