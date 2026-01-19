@@ -91,7 +91,7 @@ interface PlexAuthApiService {
      * @param includeRelay Include relay connections
      * @return List of available Plex servers
      */
-    @GET("resources")
+    @GET("api/v2/resources")
     suspend fun getResources(
         @Header("X-Plex-Token") authToken: String,
         @Header("X-Plex-Client-Identifier") clientIdentifier: String,
