@@ -117,7 +117,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.network.plex.PlexAuthState
-import MusicSourcePreference
+import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
 import com.theveloper.pixelplay.presentation.components.PermissionIconCollage
 import com.theveloper.pixelplay.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.theveloper.pixelplay.presentation.components.subcomps.SineWaveLine
