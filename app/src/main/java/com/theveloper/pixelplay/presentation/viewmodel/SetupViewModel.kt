@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
+import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
 import com.theveloper.pixelplay.data.worker.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,13 +30,23 @@ data class SetupUiState(
     val libraryNavigationMode: String = "tab_row",
     val navBarStyle: String = "default",
     val navBarCornerRadius: Int = 28,
-    val alarmsPermissionGranted: Boolean = false
+    val alarmsPermissionGranted: Boolean = false,
+    val musicSourcePreference: MusicSourcePreference = MusicSourcePreference.LOCAL_ONLY
 ) {
     val allPermissionsGranted: Boolean
         get() {
-            val mediaOk = mediaPermissionGranted
+            // If user chooses Plex-only, they don't need local media permissions
+            val mediaOk = if (musicSourcePreference == MusicSourcePreference.PLEX_ONLY) {
+                true
+            } else {
+                mediaPermissionGranted
+            }
             val notificationsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationsPermissionGranted else true
-            val allFilesOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) allFilesAccessGranted else true
+            val allFilesOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && musicSourcePreference != MusicSourcePreference.PLEX_ONLY) {
+                allFilesAccessGranted
+            } else {
+                true
+            }
             val alarmsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmsPermissionGranted else true
             return mediaOk && notificationsOk && allFilesOk && alarmsOk
         }
@@ -88,6 +99,12 @@ class SetupViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.navBarCornerRadiusFlow.collect { radius ->
                 _uiState.update { it.copy(navBarCornerRadius = radius) }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.musicSourcePreferenceFlow.collect { pref ->
+                _uiState.update { it.copy(musicSourcePreference = pref) }
             }
         }
     }
@@ -187,6 +204,12 @@ class SetupViewModel @Inject constructor(
     fun setNavBarCornerRadius(radius: Int) {
         viewModelScope.launch {
             userPreferencesRepository.setNavBarCornerRadius(radius)
+        }
+    }
+
+    fun setMusicSourcePreference(preference: MusicSourcePreference) {
+        viewModelScope.launch {
+            userPreferencesRepository.setMusicSourcePreference(preference)
         }
     }
 

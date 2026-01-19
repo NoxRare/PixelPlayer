@@ -477,6 +477,8 @@ private fun PlexAuthenticatedContent(
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 MusicSourceSelection()
+                // Extra bottom padding to ensure visibility above navigation bar
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
 
