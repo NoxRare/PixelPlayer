@@ -117,6 +117,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.network.plex.PlexAuthState
+import MusicSourcePreference
 import com.theveloper.pixelplay.presentation.components.PermissionIconCollage
 import com.theveloper.pixelplay.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.theveloper.pixelplay.presentation.components.subcomps.SineWaveLine
@@ -948,7 +949,7 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
 @Composable
 fun PlexIntegrationPage(
     uiState: SetupUiState,
-    onMusicSourceSelected: (com.theveloper.pixelplay.data.preferences.MusicSourcePreference) -> Unit,
+    onMusicSourceSelected: (MusicSourcePreference) -> Unit,
     onSkip: () -> Unit,
     viewModel: PlexViewModel = hiltViewModel()
 ) {
@@ -1126,20 +1127,20 @@ fun PlexIntegrationPage(
             ) {
                 MusicSourceChip(
                     label = "Local",
-                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.LOCAL_ONLY,
-                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.LOCAL_ONLY) },
+                    isSelected = uiState.musicSourcePreference == MusicSourcePreference.LOCAL_ONLY,
+                    onClick = { onMusicSourceSelected(MusicSourcePreference.LOCAL_ONLY) },
                     modifier = Modifier.weight(1f)
                 )
                 MusicSourceChip(
                     label = "Plex",
-                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY,
-                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY) },
+                    isSelected = uiState.musicSourcePreference == MusicSourcePreference.PLEX_ONLY,
+                    onClick = { onMusicSourceSelected(MusicSourcePreference.PLEX_ONLY) },
                     modifier = Modifier.weight(1f)
                 )
                 MusicSourceChip(
                     label = "Both",
-                    isSelected = uiState.musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.BOTH,
-                    onClick = { onMusicSourceSelected(com.theveloper.pixelplay.data.preferences.MusicSourcePreference.BOTH) },
+                    isSelected = uiState.musicSourcePreference == MusicSourcePreference.BOTH,
+                    onClick = { onMusicSourceSelected(MusicSourcePreference.BOTH) },
                     modifier = Modifier.weight(1f)
                 )
             }

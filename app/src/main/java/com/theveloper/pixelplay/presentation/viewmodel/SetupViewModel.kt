@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
+import com.theveloper.pixelplay.data.preferences.MusicSourcePreference
 import com.theveloper.pixelplay.data.worker.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -30,18 +31,18 @@ data class SetupUiState(
     val navBarStyle: String = "default",
     val navBarCornerRadius: Int = 28,
     val alarmsPermissionGranted: Boolean = false,
-    val musicSourcePreference: com.theveloper.pixelplay.data.preferences.MusicSourcePreference = com.theveloper.pixelplay.data.preferences.MusicSourcePreference.LOCAL_ONLY
+    val musicSourcePreference: MusicSourcePreference = MusicSourcePreference.LOCAL_ONLY
 ) {
     val allPermissionsGranted: Boolean
         get() {
             // If user chooses Plex-only, they don't need local media permissions
-            val mediaOk = if (musicSourcePreference == com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY) {
+            val mediaOk = if (musicSourcePreference == MusicSourcePreference.PLEX_ONLY) {
                 true
             } else {
                 mediaPermissionGranted
             }
             val notificationsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationsPermissionGranted else true
-            val allFilesOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && musicSourcePreference != com.theveloper.pixelplay.data.preferences.MusicSourcePreference.PLEX_ONLY) {
+            val allFilesOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && musicSourcePreference != MusicSourcePreference.PLEX_ONLY) {
                 allFilesAccessGranted
             } else {
                 true
@@ -206,7 +207,7 @@ class SetupViewModel @Inject constructor(
         }
     }
 
-    fun setMusicSourcePreference(preference: com.theveloper.pixelplay.data.preferences.MusicSourcePreference) {
+    fun setMusicSourcePreference(preference: MusicSourcePreference) {
         viewModelScope.launch {
             userPreferencesRepository.setMusicSourcePreference(preference)
         }
